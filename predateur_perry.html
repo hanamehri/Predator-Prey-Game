@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation Prédateur-Proie</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #fff;
+            display: block;
+            margin: 20px 0;
+        }
+        #score {
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Simulation Prédateur-Proie</h1>
+    <p id="score">Score des Prédateurs : 0</p>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const predators = [];
+        const preys = [];
+        const numPreys = 30; // Nombre de proies
+        let score = 0;
+        const minSeparation = 30; // Distance minimale entre les prédateurs
+        const predatorSpeedFactor = 2.5; // Facteur de vitesse des prédateurs (ajuster pour augmenter/diminuer la vitesse)
+
+        class Agent {
+            constructor(x, y, color, size) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = size;
+                this.dx = (Math.random() * 2 - 1) * predatorSpeedFactor;
+                this.dy = (Math.random() * 2 - 1) * predatorSpeedFactor;
+            }
+
+            move() {
+                this.x += this.dx;
+                this.y += this.dy;
+
+                // Garder l'agent dans les limites du canvas
+                if (this.x < 0 || this.x > canvas.width) this.dx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.dy *= -1;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            keepDistanceFrom(otherAgents) {
+                otherAgents.forEach(other => {
+                    if (other !== this) {
+                        const dx = this.x - other.x;
+                        const dy = this.y - other.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < minSeparation) {
+                            // S'éloigner de l'autre agent
+                            this.dx += dx / distance * 0.5;
+                            this.dy += dy / distance * 0.5;
+                        }
+                    }
+                });
+            }
+        }
+
+        // Initialiser les prédateurs
+        predators.push(new Agent(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            'red', // Prédateur rouge (leader)
+            10
+        ));
+        predators.push(new Agent(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            'orange', // Premier prédateur orange
+            10
+        ));
+        predators.push(new Agent(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            'orange', // Deuxième prédateur orange
+            10
+        ));
+
+        // Initialiser les proies
+        for (let i = 0; i < numPreys; i++) {
+            preys.push(new Agent(
+                Math.random() * canvas.width,
+                Math.random() * canvas.height,
+                'green',
+                5
+            ));
+        }
+
+        function checkCollision(predator, prey) {
+            const dx = predator.x - prey.x;
+            const dy = predator.y - prey.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < predator.size + prey.size;
+        }
+
+        function moveTowardsTarget(predator, target) {
+            if (target) {
+                const dx = target.x - predator.x;
+                const dy = target.y - predator.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                predator.dx = (dx / distance) * predatorSpeedFactor;
+                predator.dy = (dy / distance) * predatorSpeedFactor;
+            }
+        }
+
+        function findNearestPrey(predator, maxDistance) {
+            let nearestPrey = null;
+            let shortestDistance = maxDistance;
+
+            preys.forEach(prey => {
+                const dx = predator.x - prey.x;
+                const dy = predator.y - prey.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < shortestDistance) {
+                    shortestDistance = distance;
+                    nearestPrey = prey;
+                }
+            });
+
+            return nearestPrey;
+        }
+
+        function followLeaderOrHunt(predator, leader) {
+            const nearestPrey = findNearestPrey(predator, 150); // Rayon de chasse des prédateurs
+            if (nearestPrey) {
+                moveTowardsTarget(predator, nearestPrey); // Chasser la proie
+            } else {
+                moveTowardsTarget(predator, leader); // Suivre le leader
+            }
+        }
+
+        function updateGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const leader = predators[0]; // Le prédateur rouge est le leader
+
+            // Le leader chasse la proie la plus proche
+            const leaderTarget = findNearestPrey(leader, canvas.width);
+            moveTowardsTarget(leader, leaderTarget);
+            leader.move();
+            leader.draw();
+
+            // Les prédateurs oranges chassent ou suivent le leader
+            for (let i = 1; i < predators.length; i++) {
+                const predator = predators[i];
+                followLeaderOrHunt(predator, leader);
+                predator.keepDistanceFrom(predators); // Éviter les collisions
+                predator.move();
+                predator.draw();
+            }
+
+            // Déplacer et dessiner les proies
+            for (let i = preys.length - 1; i >= 0; i--) {
+                const prey = preys[i];
+                prey.move();
+                prey.draw();
+
+                // Vérifier si un prédateur capture une proie
+                predators.forEach(predator => {
+                    if (checkCollision(predator, prey)) {
+                        preys.splice(i, 1); // Retirer la proie capturée
+                        score += 10; // Augmenter le score
+                        document.getElementById('score').innerText = `Score des Prédateurs : ${score}`;
+                    }
+                });
+            }
+
+            // Réapparition des proies
+            if (preys.length < numPreys) {
+                preys.push(new Agent(
+                    Math.random() * canvas.width,
+                    Math.random() * canvas.height,
+                    'green',
+                    5
+                ));
+            }
+
+            requestAnimationFrame(updateGame);
+        }
+
+        updateGame();
+    </script>
+</body>
+</html>
+
+
+
+
+
